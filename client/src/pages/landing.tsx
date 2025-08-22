@@ -20,14 +20,25 @@ export default function Landing() {
             Test your sports knowledge across Football, Basketball, Soccer, and Baseball. 
             Compete with friends, earn points, and climb the leaderboard!
           </p>
-          <Button 
-            size="lg" 
-            className="bg-gradient-to-r from-sports-blue to-sports-purple hover:from-blue-600 hover:to-purple-600 text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
-            onClick={() => window.location.href = "/api/login"}
-            data-testid="button-login"
-          >
-            Get Started - Login with Replit
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button 
+              size="lg" 
+              className="bg-gradient-to-r from-sports-blue to-sports-purple hover:from-blue-600 hover:to-purple-600 text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+              onClick={() => window.location.href = "/api/login"}
+              data-testid="button-login"
+            >
+              Get Started - Login with Replit
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline"
+              className="border-2 border-sports-blue text-sports-blue hover:bg-sports-blue hover:text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+              onClick={() => window.location.href = "/demo/football"}
+              data-testid="button-demo"
+            >
+              Try Demo Quiz
+            </Button>
+          </div>
         </div>
 
         {/* Features Section */}

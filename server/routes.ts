@@ -1,5 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertQuizSchema, insertUserAnswerSchema, insertUserSchema, insertQuestionSchema } from "@shared/schema";
@@ -300,5 +301,253 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+
+  // WebSocket server for multiplayer functionality
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  // Simple multiplayer game state management
+  const multiplayerRooms = new Map();
+  const playerConnections = new Map();
+
+  wss.on('connection', (ws) => {
+    let playerId: string | null = null;
+    let currentRoomId: string | null = null;
+
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        switch (message.type) {
+          case 'join_lobby':
+            playerId = message.userId;
+            playerConnections.set(playerId, ws);
+            // Send available rooms
+            ws.send(JSON.stringify({
+              type: 'rooms_list',
+              rooms: Array.from(multiplayerRooms.values())
+            }));
+            break;
+
+          case 'create_room':
+            if (!playerId) break;
+            
+            const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const newRoom = {
+              id: roomId,
+              name: message.roomName,
+              category: message.category,
+              maxPlayers: message.maxPlayers || 4,
+              players: [{
+                id: playerId,
+                username: message.username || 'Player',
+                score: 0,
+                isReady: true,
+                isHost: true
+              }],
+              status: 'waiting',
+              currentQuestionIndex: 0,
+              timeRemaining: 30
+            };
+            
+            multiplayerRooms.set(roomId, newRoom);
+            currentRoomId = roomId;
+            
+            ws.send(JSON.stringify({
+              type: 'room_joined',
+              room: newRoom
+            }));
+            
+            // Notify lobby of new room
+            broadcastToLobby();
+            break;
+
+          case 'join_room':
+            if (!playerId || !message.roomId) break;
+            
+            const room = multiplayerRooms.get(message.roomId);
+            if (!room || room.players.length >= room.maxPlayers || room.status !== 'waiting') {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Cannot join room'
+              }));
+              break;
+            }
+            
+            room.players.push({
+              id: playerId,
+              username: message.username || 'Player',
+              score: 0,
+              isReady: false,
+              isHost: false
+            });
+            
+            currentRoomId = message.roomId;
+            
+            // Notify all players in room
+            broadcastToRoom(room.id, {
+              type: 'room_updated',
+              room
+            });
+            break;
+
+          case 'leave_room':
+            if (!currentRoomId) break;
+            
+            const currentRoom = multiplayerRooms.get(currentRoomId);
+            if (currentRoom) {
+              currentRoom.players = currentRoom.players.filter(p => p.id !== playerId);
+              
+              if (currentRoom.players.length === 0) {
+                multiplayerRooms.delete(currentRoomId);
+              } else {
+                // If host left, make someone else host
+                if (!currentRoom.players.find(p => p.isHost)) {
+                  currentRoom.players[0].isHost = true;
+                }
+                
+                broadcastToRoom(currentRoom.id, {
+                  type: 'room_updated',
+                  room: currentRoom
+                });
+              }
+              
+              broadcastToLobby();
+            }
+            
+            currentRoomId = null;
+            break;
+
+          case 'start_game':
+            if (!currentRoomId) break;
+            
+            const gameRoom = multiplayerRooms.get(currentRoomId);
+            if (gameRoom && gameRoom.players.find(p => p.id === playerId)?.isHost) {
+              gameRoom.status = 'playing';
+              gameRoom.currentQuestionIndex = 0;
+              
+              broadcastToRoom(gameRoom.id, {
+                type: 'game_started',
+                room: gameRoom
+              });
+              
+              // Start sending questions (simplified)
+              setTimeout(() => {
+                sendQuestionToRoom(gameRoom);
+              }, 1000);
+            }
+            break;
+
+          case 'submit_answer':
+            if (!currentRoomId) break;
+            
+            const answerRoom = multiplayerRooms.get(currentRoomId);
+            if (answerRoom) {
+              const player = answerRoom.players.find(p => p.id === playerId);
+              if (player) {
+                // Award points based on correctness and time (simplified)
+                const points = message.answerIndex === 0 ? 100 : 0; // Simplified scoring
+                player.score += points;
+                
+                broadcastToRoom(answerRoom.id, {
+                  type: 'room_updated',
+                  room: answerRoom
+                });
+              }
+            }
+            break;
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
+
+    ws.on('close', () => {
+      if (playerId) {
+        playerConnections.delete(playerId);
+        
+        // Handle room cleanup
+        if (currentRoomId) {
+          const room = multiplayerRooms.get(currentRoomId);
+          if (room) {
+            room.players = room.players.filter(p => p.id !== playerId);
+            
+            if (room.players.length === 0) {
+              multiplayerRooms.delete(currentRoomId);
+            } else {
+              if (!room.players.find(p => p.isHost)) {
+                room.players[0].isHost = true;
+              }
+              
+              broadcastToRoom(room.id, {
+                type: 'room_updated',
+                room
+              });
+            }
+            
+            broadcastToLobby();
+          }
+        }
+      }
+    });
+  });
+
+  function broadcastToLobby() {
+    const lobbyMessage = JSON.stringify({
+      type: 'rooms_list',
+      rooms: Array.from(multiplayerRooms.values())
+    });
+    
+    playerConnections.forEach((ws, playerId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(lobbyMessage);
+      }
+    });
+  }
+
+  function broadcastToRoom(roomId: string, message: any) {
+    const room = multiplayerRooms.get(roomId);
+    if (!room) return;
+    
+    const messageStr = JSON.stringify(message);
+    
+    room.players.forEach((player: any) => {
+      const ws = playerConnections.get(player.id);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    });
+  }
+
+  function sendQuestionToRoom(room: any) {
+    // Simplified question sending
+    const question = {
+      id: `q_${room.currentQuestionIndex}`,
+      question: `Sample question ${room.currentQuestionIndex + 1} for ${room.category}?`,
+      options: ['Option A', 'Option B', 'Option C', 'Option D'],
+      correctAnswer: 0,
+      points: 100
+    };
+    
+    broadcastToRoom(room.id, {
+      type: 'question',
+      question
+    });
+    
+    // Auto-advance after 30 seconds
+    setTimeout(() => {
+      room.currentQuestionIndex++;
+      
+      if (room.currentQuestionIndex < 10) {
+        sendQuestionToRoom(room);
+      } else {
+        room.status = 'finished';
+        broadcastToRoom(room.id, {
+          type: 'game_finished',
+          room
+        });
+      }
+    }, 30000);
+  }
+
   return httpServer;
 }

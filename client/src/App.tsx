@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
 import Quiz from "@/pages/quiz";
 import Admin from "@/pages/admin";
+import DemoQuiz from "@/pages/demo-quiz";
+import Multiplayer from "@/pages/multiplayer";
 import Landing from "./pages/landing";
 import NotFound from "@/pages/not-found";
 
@@ -15,12 +17,16 @@ function Router() {
 
   return (
     <Switch>
+      {/* Demo routes available without authentication */}
+      <Route path="/demo/:category" component={DemoQuiz} />
+      
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
         <>
           <Route path="/" component={Home} />
           <Route path="/quiz/:category" component={Quiz} />
+          <Route path="/multiplayer" component={Multiplayer} />
           <Route path="/admin" component={Admin} />
         </>
       )}

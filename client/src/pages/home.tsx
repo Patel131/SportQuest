@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Star, User, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import Leaderboard from "@/components/leaderboard";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const categoryIcons = {
   "Football": "🏈",
@@ -20,7 +22,23 @@ const categoryColors = {
 };
 
 export default function Home() {
-  const [currentUser] = useState({ id: "demo-user", username: "You", totalPoints: 1250 });
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { toast } = useToast();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      toast({
+        title: "Please log in",
+        description: "Redirecting to login page...",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 1000);
+      return;
+    }
+  }, [isAuthenticated, isAuthLoading, toast]);
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ["/api/categories"],
@@ -30,7 +48,7 @@ export default function Home() {
     queryKey: ["/api/leaderboard"],
   });
 
-  if (categoriesLoading || leaderboardLoading) {
+  if (categoriesLoading || leaderboardLoading || isAuthLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -56,7 +74,7 @@ export default function Home() {
             <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-4 py-2">
               <Star className="text-yellow-500 w-5 h-5" />
               <span className="font-semibold text-gray-700" data-testid="text-user-points">
-                {currentUser.totalPoints.toLocaleString()}
+                {user?.totalPoints?.toLocaleString() || '0'}
               </span>
             </div>
             <button className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors">
@@ -84,6 +102,21 @@ export default function Home() {
               />
               <h3 className="text-xl font-bold text-gray-800 mb-2">Ready to Play?</h3>
               <p className="text-gray-600 mb-4">Choose your favorite sport category and start your quiz journey!</p>
+              
+              <div className="flex gap-3">
+                <Link href="/multiplayer" className="flex-1">
+                  <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white" data-testid="button-multiplayer">
+                    <Users className="w-4 h-4 mr-2" />
+                    Join Multiplayer
+                  </Button>
+                </Link>
+                <Link href="/quiz/football" className="flex-1">
+                  <Button variant="outline" className="w-full border-sports-blue text-sports-blue hover:bg-sports-blue hover:text-white" data-testid="button-solo-quiz">
+                    <Trophy className="w-4 h-4 mr-2" />
+                    Solo Quiz
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -141,7 +174,7 @@ export default function Home() {
             <div className="text-center">
               <div className="w-24 h-24 bg-gradient-to-br from-sports-blue to-sports-purple rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-white" data-testid="text-total-score">
-                  {currentUser.totalPoints}
+                  {user!.totalPoints}
                 </span>
               </div>
               <p className="text-sm text-gray-600">Total Points</p>
@@ -151,7 +184,7 @@ export default function Home() {
             </div>
           </div>
 
-          <Leaderboard users={leaderboard || []} currentUser={user} />
+          <Leaderboard users={leaderboard || []} currentUser={user!} />
 
           {/* How to Play */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
