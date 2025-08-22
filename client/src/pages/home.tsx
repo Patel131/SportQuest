@@ -151,7 +151,7 @@ export default function Home() {
             </div>
           </div>
 
-          <Leaderboard users={leaderboard || []} currentUser={currentUser} />
+          <Leaderboard users={leaderboard || []} currentUser={user} />
 
           {/* How to Play */}
           <div className="bg-white rounded-2xl shadow-lg p-6">

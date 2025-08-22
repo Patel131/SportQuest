@@ -9,6 +9,8 @@ import QuizResultModal from "@/components/quiz-result-modal";
 import Leaderboard from "@/components/leaderboard";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "../hooks/useAuth";
+import { isUnauthorizedError } from "../lib/authUtils";
 
 interface Question {
   id: string;
@@ -34,7 +36,7 @@ export default function Quiz() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const category = params.category || "football";
-  const [currentUser] = useState({ id: "demo-user", username: "You", totalPoints: 1250 });
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const [quizState, setQuizState] = useState<QuizState>({
     currentQuestionIndex: 0,
@@ -70,7 +72,7 @@ export default function Quiz() {
   const createQuizMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/quizzes", {
-        userId: currentUser.id,
+        userId: user?.id,
         category: category,
         totalQuestions: questions?.length || 10,
         score: 0,
