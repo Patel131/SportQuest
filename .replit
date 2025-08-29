@@ -12,6 +12,7 @@ run = ["npm", "run", "start"]
 
 [[ports]]
 localPort = 5000
+externalPort = 80
 
 [env]
 PORT = "5000"
@@ -34,8 +35,8 @@ author = "agent"
 mode = "parallel"
 
 [[workflows.workflow.tasks]]
-task = "packager.installForLanguage"
-args = "nodejs"
+task = "workflow.run"
+args = "Start application"
 
 [agent]
 integrations = ["javascript_mem_db==1.0.0", "javascript_log_in_with_replit==1.0.0", "javascript_database==1.0.0", "javascript_websocket==1.0.0"]
